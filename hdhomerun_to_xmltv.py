@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import subprocess
 import sys
@@ -17,6 +18,12 @@ from xml.etree import ElementTree as ET
 
 
 DEFAULT_TIMEOUT = 20
+ALLOWED_IPV4_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+)
 
 
 def fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT) -> Any:
@@ -30,6 +37,34 @@ def fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT) -> Any:
         raise RuntimeError(f"HTTP {exc.code} fetching {redact_url(url)}: {detail[:300]}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Unable to fetch {redact_url(url)}: {exc.reason}") from exc
+
+
+def validate_local_http_url(url: str, label: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise RuntimeError(f"{label} must be an absolute HTTP or HTTPS URL")
+    if not parsed.hostname:
+        raise RuntimeError(f"{label} must include a host")
+
+    try:
+        address = ipaddress.ip_address(parsed.hostname)
+    except ValueError as exc:
+        raise RuntimeError(f"{label} must use a literal local IP address") from exc
+
+    if not is_allowed_local_address(address):
+        raise RuntimeError(f"{label} must point to a private, link-local, or loopback address")
+
+    return urllib.parse.urlunsplit(parsed)
+
+
+def is_allowed_local_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if address.is_loopback or address.is_link_local:
+        return True
+    if isinstance(address, ipaddress.IPv4Address):
+        return any(address in network for network in ALLOWED_IPV4_NETWORKS)
+    if isinstance(address, ipaddress.IPv6Address):
+        return address in ipaddress.ip_network("fc00::/7")
+    return False
 
 
 def discover_device_url() -> str | None:
@@ -61,8 +96,8 @@ def normalize_device_url(device: str | None) -> str:
             return discovered
         raise RuntimeError("No HDHomeRun device found. Install hdhomerun_config or pass --device.")
     if device.startswith(("http://", "https://")):
-        return device.rstrip("/")
-    return f"http://{device.rstrip('/')}"
+        return validate_local_http_url(device.rstrip("/"), "HDHomeRun device URL")
+    return validate_local_http_url(f"http://{device.rstrip('/')}", "HDHomeRun device URL")
 
 
 def build_guide_url(auth: str, start: int | None, guide_number: str | None) -> str:
@@ -229,7 +264,10 @@ def main() -> int:
 
     discover = fetch_json(f"{device_url}/discover.json")
     auth = discover.get("DeviceAuth")
-    lineup_url = discover.get("LineupURL") or f"{device_url}/lineup.json"
+    lineup_url = validate_local_http_url(
+        discover.get("LineupURL") or f"{device_url}/lineup.json",
+        "HDHomeRun LineupURL",
+    )
     if not auth:
         raise RuntimeError(f"No DeviceAuth found in {device_url}/discover.json")
 
