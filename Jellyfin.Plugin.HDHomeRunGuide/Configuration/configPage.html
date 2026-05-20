@@ -57,6 +57,9 @@
                         <button is="emby-button" type="button" class="raised button-cancel block" id="btnRefresh">
                             <span>Refresh Now</span>
                         </button>
+                        <button is="emby-button" type="button" class="raised button-cancel block" id="btnLogs">
+                            <span>View Logs</span>
+                        </button>
                         <button is="emby-button" type="submit" class="raised button-submit block">
                             <span>Save</span>
                         </button>
@@ -193,9 +196,11 @@
                 page().querySelector('#btnAddMyTuners').addEventListener('click', function () {
                     Dashboard.showLoadingMsg();
                     setStatus('Finding HDHomeRun tuners and configuring Live TV...');
-                    ApiClient.ajax({
-                        type: 'POST',
-                        url: ApiClient.getUrl('HDHomeRunGuide/AddMyTuners')
+                    saveConfig().then(function () {
+                        return ApiClient.ajax({
+                            type: 'POST',
+                            url: ApiClient.getUrl('HDHomeRunGuide/AddMyTuners')
+                        });
                     }).then(function (result) {
                         setStatus('Tuners added and guide refreshed.\nSource: ' + valueOf(result, 'guideSource', 'GuideSource') + '\nTuners: ' + valueOf(result, 'tunerCount', 'TunerCount') + '\nXMLTV: ' + valueOf(result, 'guidePath', 'GuidePath') + '\nM3U: ' + valueOf(result, 'm3uPath', 'M3uPath') + '\nChannels: ' + valueOf(result, 'channelCount', 'ChannelCount') + '\nProgrammes: ' + valueOf(result, 'programmeCount', 'ProgrammeCount'));
                         loadConfig();
@@ -228,6 +233,18 @@
                         setStatus('Refresh complete.\nSource: ' + valueOf(result, 'guideSource', 'GuideSource') + '\nTuners: ' + valueOf(result, 'tunerCount', 'TunerCount') + '\nXMLTV: ' + valueOf(result, 'guidePath', 'GuidePath') + '\nM3U: ' + valueOf(result, 'm3uPath', 'M3uPath') + '\nChannels: ' + valueOf(result, 'channelCount', 'ChannelCount') + '\nProgrammes: ' + valueOf(result, 'programmeCount', 'ProgrammeCount'));
                     }).catch(function (err) {
                         setStatus(problemMessage(err, 'Refresh failed.'));
+                    }).finally(Dashboard.hideLoadingMsg);
+                });
+
+                page().querySelector('#btnLogs').addEventListener('click', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.ajax({
+                        type: 'GET',
+                        url: ApiClient.getUrl('HDHomeRunGuide/Logs')
+                    }).then(function (logs) {
+                        setStatus(logs && logs.length ? logs.join('\n') : 'No HDHomeRun Guide plugin logs recorded yet.');
+                    }).catch(function (err) {
+                        setStatus(problemMessage(err, 'Could not load plugin logs.'));
                     }).finally(Dashboard.hideLoadingMsg);
                 });
             })();

@@ -30,6 +30,7 @@ public sealed class LiveTvConfigurator
     private readonly IListingsManager _listingsManager;
     private readonly IGuideManager _guideManager;
     private readonly IServerConfigurationManager _configurationManager;
+    private readonly PluginLogService _pluginLog;
     private readonly ILogger<LiveTvConfigurator> _logger;
 
     /// <summary>
@@ -39,18 +40,21 @@ public sealed class LiveTvConfigurator
     /// <param name="listingsManager">Listings manager.</param>
     /// <param name="guideManager">Guide manager.</param>
     /// <param name="configurationManager">Server configuration manager.</param>
+    /// <param name="pluginLog">Plugin diagnostic log.</param>
     /// <param name="logger">Logger.</param>
     public LiveTvConfigurator(
         ITunerHostManager tunerHostManager,
         IListingsManager listingsManager,
         IGuideManager guideManager,
         IServerConfigurationManager configurationManager,
+        PluginLogService pluginLog,
         ILogger<LiveTvConfigurator> logger)
     {
         _tunerHostManager = tunerHostManager;
         _listingsManager = listingsManager;
         _guideManager = guideManager;
         _configurationManager = configurationManager;
+        _pluginLog = pluginLog;
         _logger = logger;
     }
 
@@ -119,9 +123,23 @@ public sealed class LiveTvConfigurator
     public async Task<IReadOnlyList<TunerHostInfo>> DiscoverHdhomerunTunersAsync(CancellationToken cancellationToken)
     {
         var results = new List<TunerHostInfo>();
+        var inspectedCount = 0;
 
         await foreach (var tuner in _tunerHostManager.DiscoverTuners(false).WithCancellation(cancellationToken).ConfigureAwait(false))
         {
+            inspectedCount++;
+            _pluginLog.Info(
+                "Jellyfin discovery candidate: Type="
+                + EmptyForLog(tuner.Type)
+                + ", FriendlyName="
+                + EmptyForLog(tuner.FriendlyName)
+                + ", Url="
+                + EmptyForLog(tuner.Url)
+                + ", DeviceId="
+                + EmptyForLog(tuner.DeviceId)
+                + ", TunerCount="
+                + tuner.TunerCount);
+
             if (!IsHdhomerunTuner(tuner))
             {
                 continue;
@@ -130,6 +148,7 @@ public sealed class LiveTvConfigurator
             results.Add(tuner);
         }
 
+        _pluginLog.Info($"Jellyfin discovery inspected {inspectedCount} candidates and accepted {results.Count} HDHomeRun candidates.");
         return results;
     }
 
@@ -212,6 +231,11 @@ public sealed class LiveTvConfigurator
             || (!string.IsNullOrWhiteSpace(tuner.FriendlyName)
                 && tuner.FriendlyName.Replace(" ", string.Empty, StringComparison.Ordinal)
                     .Contains("HDHomeRun", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string EmptyForLog(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "(empty)" : value;
     }
 
     private static NameValuePair[] BuildChannelMappings(string m3uPath)

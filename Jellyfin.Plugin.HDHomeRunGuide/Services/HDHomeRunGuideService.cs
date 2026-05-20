@@ -21,6 +21,7 @@ public sealed class HDHomeRunGuideService
     private readonly HDHomeRunClient _client;
     private readonly GuideWriter _writer;
     private readonly LiveTvConfigurator _liveTvConfigurator;
+    private readonly PluginLogService _pluginLog;
     private readonly ILogger<HDHomeRunGuideService> _logger;
 
     /// <summary>
@@ -29,16 +30,19 @@ public sealed class HDHomeRunGuideService
     /// <param name="client">HDHomeRun client.</param>
     /// <param name="writer">Guide writer.</param>
     /// <param name="liveTvConfigurator">Live TV configurator.</param>
+    /// <param name="pluginLog">Plugin diagnostic log.</param>
     /// <param name="logger">Logger.</param>
     public HDHomeRunGuideService(
         HDHomeRunClient client,
         GuideWriter writer,
         LiveTvConfigurator liveTvConfigurator,
+        PluginLogService pluginLog,
         ILogger<HDHomeRunGuideService> logger)
     {
         _client = client;
         _writer = writer;
         _liveTvConfigurator = liveTvConfigurator;
+        _pluginLog = pluginLog;
         _logger = logger;
     }
 
@@ -129,6 +133,7 @@ public sealed class HDHomeRunGuideService
     /// <returns>Discovered tuners.</returns>
     public Task<IReadOnlyList<DiscoveredTuner>> DiscoverTunersAsync(string? subnet, CancellationToken cancellationToken)
     {
+        _pluginLog.Info("Find HDHomeRun Tuners requested. Subnet=" + EmptyForLog(subnet));
         return DiscoverTunersCoreAsync(subnet, cancellationToken);
     }
 
@@ -142,11 +147,21 @@ public sealed class HDHomeRunGuideService
         var plugin = Plugin.Instance ?? throw new InvalidOperationException("Plugin instance is not available.");
         var config = plugin.Configuration;
         var inferredSubnets = GetScanSubnets(config.ScanSubnet);
+        _pluginLog.Info(
+            "Add My Tuners requested. Saved tuner address="
+            + EmptyForLog(config.TunerAddress)
+            + ", saved subnet="
+            + EmptyForLog(config.ScanSubnet)
+            + ", inferred subnets="
+            + FormatList(inferredSubnets));
+
         var tuners = await DiscoverTunersCoreAsync(config.ScanSubnet, cancellationToken).ConfigureAwait(false);
+        _pluginLog.Info("Add My Tuners discovery returned " + tuners.Count + " tuners.");
         var tuner = tuners.FirstOrDefault();
 
         if (tuner is null)
         {
+            _pluginLog.Warning("Add My Tuners could not find an HDHomeRun tuner.");
             throw new InvalidOperationException("Jellyfin did not find an HDHomeRun tuner.");
         }
 
@@ -163,6 +178,7 @@ public sealed class HDHomeRunGuideService
             "Selected HDHomeRun {DeviceId} at {Address} from Jellyfin discovery",
             tuner.DeviceId,
             tuner.Address);
+        _pluginLog.Info("Selected HDHomeRun " + tuner.DeviceId + " at " + tuner.Address + " with " + tuner.TunerCount + " tuners.");
 
         return await RefreshAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -175,6 +191,7 @@ public sealed class HDHomeRunGuideService
     /// <returns>Discovered tuner.</returns>
     public async Task<DiscoveredTuner> TestTunerAsync(string address, CancellationToken cancellationToken)
     {
+        _pluginLog.Info("Test Tuner requested for " + EmptyForLog(address) + ".");
         var discover = await _client.GetDiscoverInfoAsync(address, cancellationToken).ConfigureAwait(false);
         return new DiscoveredTuner(
             HDHomeRunClient.NormalizeBaseUri(address).Host,
@@ -188,27 +205,37 @@ public sealed class HDHomeRunGuideService
         var builtInTuners = await DiscoverBuiltInTunersAsync(cancellationToken).ConfigureAwait(false);
         if (builtInTuners.Count > 0)
         {
+            _pluginLog.Info("Using " + builtInTuners.Count + " tuners from Jellyfin built-in discovery.");
             return builtInTuners;
         }
 
         var results = new List<DiscoveredTuner>();
-        foreach (var scanSubnet in GetScanSubnets(subnet))
+        var scanSubnets = GetScanSubnets(subnet);
+        _pluginLog.Info("Jellyfin built-in discovery returned no accepted tuners. Fallback subnets=" + FormatList(scanSubnets));
+
+        foreach (var scanSubnet in scanSubnets)
         {
             try
             {
-                results.AddRange(await _client.DiscoverTunersAsync(scanSubnet, cancellationToken).ConfigureAwait(false));
+                _pluginLog.Info("Scanning fallback subnet " + scanSubnet + ".");
+                var subnetResults = await _client.DiscoverTunersAsync(scanSubnet, cancellationToken).ConfigureAwait(false);
+                _pluginLog.Info("Fallback subnet " + scanSubnet + " returned " + subnetResults.Count + " tuners.");
+                results.AddRange(subnetResults);
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {
                 _logger.LogWarning(ex, "Could not scan HDHomeRun subnet {Subnet}", scanSubnet);
+                _pluginLog.Warning("Could not scan fallback subnet " + scanSubnet + ".", ex);
             }
         }
 
-        return results
+        var deduped = results
             .GroupBy(item => item.Address, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .OrderBy(item => item.Address, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        _pluginLog.Info("Fallback discovery returned " + deduped.Count + " unique tuners.");
+        return deduped;
     }
 
     private async Task<IReadOnlyList<DiscoveredTuner>> DiscoverBuiltInTunersAsync(CancellationToken cancellationToken)
@@ -216,15 +243,18 @@ public sealed class HDHomeRunGuideService
         var tunerHosts = await _liveTvConfigurator.DiscoverHdhomerunTunersAsync(cancellationToken).ConfigureAwait(false);
         var results = new List<DiscoveredTuner>();
         var seenAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _pluginLog.Info("Processing " + tunerHosts.Count + " Jellyfin HDHomeRun candidates.");
 
         foreach (var tunerHost in tunerHosts)
         {
             var address = ReadAddress(tunerHost);
             if (string.IsNullOrWhiteSpace(address) || !seenAddresses.Add(address))
             {
+                _pluginLog.Warning("Skipping Jellyfin discovery candidate with duplicate or empty address. Url=" + EmptyForLog(tunerHost.Url));
                 continue;
             }
 
+            _pluginLog.Info("Enriching Jellyfin discovery candidate at " + address + ".");
             results.Add(await EnrichBuiltInTunerAsync(tunerHost, address, cancellationToken).ConfigureAwait(false));
         }
 
@@ -248,6 +278,7 @@ public sealed class HDHomeRunGuideService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not enrich Jellyfin-discovered HDHomeRun at {Address}", address);
+            _pluginLog.Warning("Could not read discover.json for Jellyfin-discovered HDHomeRun at " + address + ".", ex);
             return new DiscoveredTuner(
                 address,
                 tunerHost.DeviceId,
@@ -314,5 +345,15 @@ public sealed class HDHomeRunGuideService
     {
         var bytes = address.GetAddressBytes();
         return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.0/24";
+    }
+
+    private static string EmptyForLog(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "(empty)" : value;
+    }
+
+    private static string FormatList(IReadOnlyList<string> values)
+    {
+        return values.Count == 0 ? "(none)" : string.Join(", ", values);
     }
 }

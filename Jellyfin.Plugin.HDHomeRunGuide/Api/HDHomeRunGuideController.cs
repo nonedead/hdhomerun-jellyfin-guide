@@ -18,14 +18,17 @@ namespace Jellyfin.Plugin.HDHomeRunGuide.Api;
 public sealed class HDHomeRunGuideController : ControllerBase
 {
     private readonly HDHomeRunGuideService _guideService;
+    private readonly PluginLogService _pluginLog;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HDHomeRunGuideController"/> class.
     /// </summary>
     /// <param name="guideService">Guide service.</param>
-    public HDHomeRunGuideController(HDHomeRunGuideService guideService)
+    /// <param name="pluginLog">Plugin diagnostic log.</param>
+    public HDHomeRunGuideController(HDHomeRunGuideService guideService, PluginLogService pluginLog)
     {
         _guideService = guideService;
+        _pluginLog = pluginLog;
     }
 
     /// <summary>
@@ -44,6 +47,16 @@ public sealed class HDHomeRunGuideController : ControllerBase
         var config = plugin.Configuration;
         config.LastError = RedactSecrets(config.LastError);
         return config;
+    }
+
+    /// <summary>
+    /// Gets recent plugin diagnostic logs.
+    /// </summary>
+    /// <returns>Recent plugin diagnostic logs.</returns>
+    [HttpGet("Logs")]
+    public ActionResult<IReadOnlyList<string>> Logs()
+    {
+        return Ok(_pluginLog.GetRecent());
     }
 
     /// <summary>
