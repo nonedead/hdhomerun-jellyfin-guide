@@ -72,7 +72,7 @@ public sealed class HDHomeRunGuideController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Discovered tuner list.</returns>
     [HttpGet("Discover")]
-    public async Task<ActionResult<IReadOnlyList<DiscoveredTuner>>> Discover([FromQuery] string subnet, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<DiscoveredTuner>>> Discover([FromQuery] string? subnet, CancellationToken cancellationToken)
     {
         try
         {

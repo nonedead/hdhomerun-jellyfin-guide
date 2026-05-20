@@ -84,7 +84,7 @@ In Jellyfin:
 
 Saving triggers an immediate refresh. Future refreshes run in the background.
 
-You can still enter a tuner IP or URL manually, such as `192.168.1.4`, and use **Find HDHomeRun Tuners** for troubleshooting. Discovery is deduplicated by physical device, so a two-tuner HDHomeRun appears as one device with two available tuners.
+You can still enter a tuner IP or URL manually, such as `192.168.1.4`, and use **Find HDHomeRun Tuners** for troubleshooting. Discovery is deduplicated by physical device, so a two-tuner HDHomeRun appears as one device with two available tuners. If no scan subnet is configured, the plugin infers private LAN `/24` ranges from the Jellyfin server network interfaces and never scans `127.0.0.1`.
 
 ## Notes
 

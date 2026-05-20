@@ -210,7 +210,8 @@ public sealed class LiveTvConfigurator
     {
         return string.Equals(tuner.Type, "hdhomerun", StringComparison.OrdinalIgnoreCase)
             || (!string.IsNullOrWhiteSpace(tuner.FriendlyName)
-                && tuner.FriendlyName.Contains("HDHomeRun", StringComparison.OrdinalIgnoreCase));
+                && tuner.FriendlyName.Replace(" ", string.Empty, StringComparison.Ordinal)
+                    .Contains("HDHomeRun", StringComparison.OrdinalIgnoreCase));
     }
 
     private static NameValuePair[] BuildChannelMappings(string m3uPath)

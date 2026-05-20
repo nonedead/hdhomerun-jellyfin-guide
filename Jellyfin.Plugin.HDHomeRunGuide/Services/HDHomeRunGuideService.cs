@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.HDHomeRunGuide.Configuration;
@@ -124,7 +127,7 @@ public sealed class HDHomeRunGuideService
     /// <param name="subnet">CIDR subnet.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Discovered tuners.</returns>
-    public Task<IReadOnlyList<DiscoveredTuner>> DiscoverTunersAsync(string subnet, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<DiscoveredTuner>> DiscoverTunersAsync(string? subnet, CancellationToken cancellationToken)
     {
         return DiscoverTunersCoreAsync(subnet, cancellationToken);
     }
@@ -138,6 +141,7 @@ public sealed class HDHomeRunGuideService
     {
         var plugin = Plugin.Instance ?? throw new InvalidOperationException("Plugin instance is not available.");
         var config = plugin.Configuration;
+        var inferredSubnets = GetScanSubnets(config.ScanSubnet);
         var tuners = await DiscoverTunersCoreAsync(config.ScanSubnet, cancellationToken).ConfigureAwait(false);
         var tuner = tuners.FirstOrDefault();
 
@@ -147,6 +151,11 @@ public sealed class HDHomeRunGuideService
         }
 
         config.TunerAddress = tuner.Address;
+        if (string.IsNullOrWhiteSpace(config.ScanSubnet) && inferredSubnets.Count == 1)
+        {
+            config.ScanSubnet = inferredSubnets[0];
+        }
+
         config.AutoConfigureLiveTv = true;
         plugin.UpdateConfiguration(config);
 
@@ -174,7 +183,7 @@ public sealed class HDHomeRunGuideService
             discover.TunerCount);
     }
 
-    private async Task<IReadOnlyList<DiscoveredTuner>> DiscoverTunersCoreAsync(string subnet, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<DiscoveredTuner>> DiscoverTunersCoreAsync(string? subnet, CancellationToken cancellationToken)
     {
         var builtInTuners = await DiscoverBuiltInTunersAsync(cancellationToken).ConfigureAwait(false);
         if (builtInTuners.Count > 0)
@@ -182,12 +191,24 @@ public sealed class HDHomeRunGuideService
             return builtInTuners;
         }
 
-        if (string.IsNullOrWhiteSpace(subnet))
+        var results = new List<DiscoveredTuner>();
+        foreach (var scanSubnet in GetScanSubnets(subnet))
         {
-            return [];
+            try
+            {
+                results.AddRange(await _client.DiscoverTunersAsync(scanSubnet, cancellationToken).ConfigureAwait(false));
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                _logger.LogWarning(ex, "Could not scan HDHomeRun subnet {Subnet}", scanSubnet);
+            }
         }
 
-        return await _client.DiscoverTunersAsync(subnet, cancellationToken).ConfigureAwait(false);
+        return results
+            .GroupBy(item => item.Address, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(item => item.Address, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private async Task<IReadOnlyList<DiscoveredTuner>> DiscoverBuiltInTunersAsync(CancellationToken cancellationToken)
@@ -261,5 +282,37 @@ public sealed class HDHomeRunGuideService
         }
 
         return string.Empty;
+    }
+
+    private static IReadOnlyList<string> GetScanSubnets(string? configuredSubnet)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredSubnet))
+        {
+            return [configuredSubnet];
+        }
+
+        return NetworkInterface.GetAllNetworkInterfaces()
+            .Where(adapter => adapter.OperationalStatus == OperationalStatus.Up)
+            .SelectMany(adapter => adapter.GetIPProperties().UnicastAddresses)
+            .Where(address => address.Address.AddressFamily == AddressFamily.InterNetwork)
+            .Select(address => address.Address)
+            .Where(IsPrivateAddress)
+            .Select(ToLocal24Subnet)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsPrivateAddress(IPAddress address)
+    {
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 10
+            || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+            || (bytes[0] == 192 && bytes[1] == 168);
+    }
+
+    private static string ToLocal24Subnet(IPAddress address)
+    {
+        var bytes = address.GetAddressBytes();
+        return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.0/24";
     }
 }
