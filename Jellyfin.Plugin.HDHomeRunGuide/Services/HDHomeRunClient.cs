@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -140,7 +141,7 @@ public sealed class HDHomeRunClient
                             discover.TunerCount));
                     }
                 }
-                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or JsonException or UriFormatException)
                 {
                     _logger.LogDebug(ex, "No HDHomeRun discover.json at {Address}", address);
                 }
