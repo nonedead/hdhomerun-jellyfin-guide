@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Jellyfin.Plugin.HDHomeRunGuide.Services;
@@ -73,11 +75,14 @@ public sealed class LineupItem
     /// Gets or sets a value indicating whether this lineup entry is disabled.
     /// </summary>
     [JsonPropertyName("DRM")]
+    [JsonConverter(typeof(FlexibleBooleanJsonConverter))]
     public bool Drm { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether this lineup entry is disabled.
+    /// Gets or sets a value indicating whether this lineup entry is favorited.
     /// </summary>
+    [JsonPropertyName("Favorite")]
+    [JsonConverter(typeof(FlexibleBooleanJsonConverter))]
     public bool Favorite { get; set; }
 }
 
@@ -204,3 +209,44 @@ public sealed record RefreshResult(string GuidePath, string M3uPath, int Channel
 /// Discovered tuner information exposed to the setup page.
 /// </summary>
 public sealed record DiscoveredTuner(string Address, string DeviceId, string FriendlyName, int TunerCount);
+
+/// <summary>
+/// Converts flexible HDHomeRun boolean values such as
+/// true/false, 0/1, and string equivalents.
+/// </summary>
+public sealed class FlexibleBooleanJsonConverter : JsonConverter<bool>
+{
+    /// <summary>
+    /// Converts JSON values into a boolean.
+    /// Supports true/false, 0/1, and string equivalents.
+    /// </summary>
+    /// <param name="reader">The JSON reader.</param>
+    /// <param name="typeToConvert">The target type.</param>
+    /// <param name="options">Serializer options.</param>
+    /// <returns>The converted boolean value.</returns>
+    public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.True => true,
+            JsonTokenType.False => false,
+            JsonTokenType.Number => reader.GetInt32() != 0,
+            JsonTokenType.String => bool.TryParse(reader.GetString(), out var b)
+                ? b
+                : int.TryParse(reader.GetString(), out var i) && i != 0,
+            JsonTokenType.Null => false,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Writes a boolean value to JSON.
+    /// </summary>
+    /// <param name="writer">The JSON writer.</param>
+    /// <param name="value">The boolean value.</param>
+    /// <param name="options">Serializer options.</param>
+    public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
+    {
+        writer.WriteBooleanValue(value);
+    }
+}
