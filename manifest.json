@@ -1,0 +1,21 @@
+[
+  {
+    "category": "Live TV",
+    "guid": "a8b5c3d2-e4f6-7890-abcd-ef1234567890",
+    "imageUrl": "",
+    "name": "HDHomeRun Guide",
+    "description": "Jellyfin plugin for SiliconDust HDHomeRun guide data with standard and paid DVR XMLTV modes.",
+    "overview": "Automatically refreshes HDHomeRun EPG data inside Jellyfin without external scripts or containers.",
+    "owner": "nonedead",
+    "versions": [
+      {
+        "checksum": "",
+        "changelog": "Initial release from nonedead fork.",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/nonedead/hdhomerun-jellyfin-guide/releases/latest/download/jellyfin-hdhomerun-guide.zip",
+        "timestamp": "2026-07-02T00:00:00Z",
+        "version": "0.2.0.0"
+      }
+    ]
+  }
+]
