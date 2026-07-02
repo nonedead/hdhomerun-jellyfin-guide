@@ -9,7 +9,7 @@
     "owner": "nonedead",
     "versions": [
       {
-        "checksum": "",
+        "checksum": "6000f020f4a836f0ff19b0456de342b1",
         "changelog": "Initial release from nonedead fork.",
         "targetAbi": "10.9.0.0",
         "sourceUrl": "https://github.com/nonedead/hdhomerun-jellyfin-guide/releases/latest/download/jellyfin-hdhomerun-guide.zip",
