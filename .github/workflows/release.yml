@@ -17,14 +17,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Build
-        run: dotnet publish --configuration Release --output ./publish
+        run: dotnet publish Jellyfin.Plugin.HDHomeRunGuide/Jellyfin.Plugin.HDHomeRunGuide.csproj --configuration Release --output ./publish
 
       - name: Zip artifact
-        run: zip -j jellyfin-hdhomerun-guide.zip ./publish/*.dll
-
-      - name: Get checksum
-        id: checksum
-        run: echo "md5=$(md5sum jellyfin-hdhomerun-guide.zip | awk '{print $1}')" >> $GITHUB_OUTPUT
+        run: zip -j jellyfin-hdhomerun-guide.zip ./publish/Jellyfin.Plugin.HDHomeRunGuide.dll
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
