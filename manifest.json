@@ -1,7 +1,7 @@
 [
   {
     "category": "Live TV",
-    "guid": "a8b5c3d2-e4f6-7890-abcd-ef1234567890",
+    "guid": "dedaf64f-c6d3-4b51-b88e-64873ec088a5",
     "imageUrl": "",
     "name": "HDHomeRun Guide",
     "description": "Jellyfin plugin for SiliconDust HDHomeRun guide data with standard and paid DVR XMLTV modes.",
