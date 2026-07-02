@@ -1,0 +1,32 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build
+        run: dotnet publish --configuration Release --output ./publish
+
+      - name: Zip artifact
+        run: zip -j jellyfin-hdhomerun-guide.zip ./publish/*.dll
+
+      - name: Get checksum
+        id: checksum
+        run: echo "md5=$(md5sum jellyfin-hdhomerun-guide.zip | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: jellyfin-hdhomerun-guide.zip
