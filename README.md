@@ -2,8 +2,10 @@
 
 `I forked the original repo to use GitHub Actions to generate a manifest.json for Jellyfin to use directly`
 ```text
-If you just want a drop in option use the following url: https://raw.githubusercontent.com/nonedead/hdhomerun-jellyfin-guide/refs/heads/main/manifest.json
+If you just want a drop in option use the following url
 ```
+`https://raw.githubusercontent.com/nonedead/hdhomerun-jellyfin-guide/refs/heads/main/manifest.json`
+
 Server-side Jellyfin plugin that keeps Live TV XMLTV guide data fresh for
 SiliconDust HDHomeRun tuners.
 
@@ -67,6 +69,7 @@ scripts/                           Legacy standalone refresh helper
 examples/                          macOS LaunchAgent example for standalone mode
 hdhomerun_to_xmltv.py              Legacy standalone XMLTV/M3U generator
 build.yaml                         Jellyfin plugin metadata
+manifest.json                      Jellyfin plufin manifest
 ```
 
 The Jellyfin plugin is the recommended path. The standalone Python script remains for troubleshooting or non-plugin deployments.
